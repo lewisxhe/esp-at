@@ -297,7 +297,7 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
         if (s_user_ota_is_chunked) {
             printf("receive len=%d, receive total len=%d\r\n", evt->data_len, s_user_ota_recv_size);
         } else {
-            printf("total_len=%d(%d), %0.1f%%!\r\n", s_user_ota_total_size, s_user_ota_recv_size, (s_user_ota_recv_size*1.0) * 100 / s_user_ota_total_size);
+            printf("total_len=%d(%d), %0.1f%%!\r\n", s_user_ota_total_size, s_user_ota_recv_size, (s_user_ota_recv_size * 1.0) * 100 / s_user_ota_total_size);
         }
 
         break;
@@ -380,7 +380,7 @@ static uint8_t at_setup_cmd_userota(uint8_t para_num)
     s_user_ota_is_chunked = true;
 
     esp_http_client_config_t config = {
-        .url = (const char*)url,
+        .url = (const char *)url,
         .event_handler = _http_event_handler,
         .keep_alive_enable = true,
         .timeout_ms = 10000,
@@ -403,7 +403,7 @@ static uint8_t at_setup_cmd_userota(uint8_t para_num)
         esp_at_response_result(ESP_AT_RESULT_CODE_OK);
         esp_at_port_wait_write_complete(ESP_AT_PORT_TX_WAIT_MS_MAX);
         esp_restart();
-        for(;;){
+        for (;;) {
         }
     } else {
         return ESP_AT_RESULT_CODE_ERROR;
@@ -420,12 +420,12 @@ static uint8_t at_query_cmd_userdocs(uint8_t *cmd_name)
 
     // https:<hostname>/<project>/<language>/<version>/<target>/<home_web_page>
     ret += snprintf((char *)buffer + ret, AT_USERDOCS_BUFFER_LEN_MAX - ret, "%s:\"https://%s/%s/%s/%s/%s/%s\"\r\n",
-        cmd_name, AT_DOCS_SERVER_HOSTNAME, AT_DOCS_PROJECT_PATH, AT_DOCS_LANGUAGE_EN,
-        AT_DOCS_VERSION, CONFIG_IDF_TARGET, AT_DOCS_HOME_WEB_PAGE);
+                    cmd_name, AT_DOCS_SERVER_HOSTNAME, AT_DOCS_PROJECT_PATH, AT_DOCS_LANGUAGE_EN,
+                    AT_DOCS_VERSION, CONFIG_IDF_TARGET, AT_DOCS_HOME_WEB_PAGE);
 
     ret += snprintf((char *)buffer + ret, AT_USERDOCS_BUFFER_LEN_MAX - ret, "%s:\"https://%s/%s/%s/%s/%s/%s\"\r\n",
-        cmd_name, AT_DOCS_SERVER_HOSTNAME, AT_DOCS_PROJECT_PATH, AT_DOCS_LANGUAGE_CN,
-        AT_DOCS_VERSION, CONFIG_IDF_TARGET, AT_DOCS_HOME_WEB_PAGE);
+                    cmd_name, AT_DOCS_SERVER_HOSTNAME, AT_DOCS_PROJECT_PATH, AT_DOCS_LANGUAGE_CN,
+                    AT_DOCS_VERSION, CONFIG_IDF_TARGET, AT_DOCS_HOME_WEB_PAGE);
 
     esp_at_port_write_data(buffer, ret);
     free(buffer);
@@ -666,6 +666,216 @@ static uint8_t at_setup_cmd_usermcusleep(uint8_t para_num)
 }
 #endif
 
+
+///! GPIO
+static bool check_gpio_valid(int gpio)
+{
+    switch (gpio) {
+    case 2:
+    case 3:
+    case 4:
+    case 5:
+    case 8:
+    case 9:
+    case 16:
+    case 17:
+    case 19:
+    case 20:
+    case 21:
+    case 22:
+    case 23:
+        break;
+    default:
+        return false;
+    }
+    return true;
+}
+
+static int get_pico_physics_gpio_num(int index)
+{
+    struct pico_physics_gpio {
+        uint8_t pico_num;
+        uint8_t physics_gpio;
+    } __gpio[13] = {
+        {0, 2},
+        {1, 3},
+        {2, 4},
+        {3, 5},
+        {4, 8},
+        {5, 9},
+        {6, 19},
+        {7, 20},
+        {8, 21},
+        {9, 22},
+        {10, 23},
+        {11, 16},   //TX
+        {12, 17},   //RX
+    };
+    // 2,3,4,5,8,9,16,17,19,20,21,22,23
+    // 0,1,2,3,4,5,6,7,8,9,10,11(TX),12(RX)
+    if (index >= 13)return -1;
+    return __gpio[index].physics_gpio;
+}
+
+/// @brief +CGDRT: {GPIO},{0:IN, 1:OUTPUT}[,{0:Disable pullup,1:Enable pullup},{0:Disable pulldown,1:Enable pulldown}]
+/// @param cmd_name
+static uint8_t at_query_cmd_config_gpio(uint8_t *cmd_name)
+{
+    uint8_t buffer[256] = {0};
+    snprintf((char *)buffer, 256, "+CGDRT={0,1,2,3,4,5,6,7,8,9,10,11(TX),12(RX)},{0,1,2,3}[{0,1},{0,1}]\r\n");
+    esp_at_port_write_data(buffer, strlen((char *)buffer));
+    return ESP_AT_RESULT_CODE_OK;
+}
+
+/// @brief
+/// @param cmd_name
+/// @return
+static uint8_t at_query_cmd_set_gpio(uint8_t *cmd_name)
+{
+    uint8_t buffer[64] = {0};
+    snprintf((char *)buffer, 64, "+CGSETV={0,1,2,3,4,5,6,7,8,9,10,11(TX),12(RX)},{1,0}\r\n");
+    esp_at_port_write_data(buffer, strlen((char *)buffer));
+    return ESP_AT_RESULT_CODE_OK;
+}
+
+/// @brief
+/// @param cmd_name
+/// @return
+static uint8_t at_query_cmd_get_gpio(uint8_t *cmd_name)
+{
+    uint8_t buffer[64] = {0};
+    snprintf((char *)buffer, 64, "+CGGETV={0,1,2,3,4,5,6,7,8,9,10,11(TX),12(RX)}\r\n");
+    esp_at_port_write_data(buffer, strlen((char *)buffer));
+    return ESP_AT_RESULT_CODE_OK;
+}
+
+/// @brief
+/// @param para_num
+/// @return
+static uint8_t at_setup_cmd_config_gpio(uint8_t para_num)
+{
+    uint8_t num_index = 0;
+    int32_t para_gpio = 0;
+    int32_t para_pullup = 0;
+    int32_t para_pulldown = 0;
+    int32_t para_mode = 0;
+    //zero-initialize the config structure.
+    gpio_config_t io_conf = {};
+    //disable interrupt
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+
+    if (esp_at_get_para_as_digit(num_index++, &para_gpio) != ESP_AT_PARA_PARSE_RESULT_OK) {
+        return ESP_AT_RESULT_CODE_ERROR;
+    }
+
+    // if (!check_gpio_valid(para_gpio)) {
+    //     return ESP_AT_RESULT_CODE_ERROR;
+    // }
+    int gpio_num = get_pico_physics_gpio_num(para_gpio);
+    if (gpio_num == -1) {
+        return ESP_AT_RESULT_CODE_ERROR;
+    }
+
+
+    if (esp_at_get_para_as_digit(num_index++, &para_mode) != ESP_AT_PARA_PARSE_RESULT_OK) {
+        return ESP_AT_RESULT_CODE_ERROR;
+    }
+
+    //bit mask of the pins that you want to set,e.g.GPIO18/19
+    io_conf.pin_bit_mask = (gpio_num_t)(1 << gpio_num);
+
+    switch (para_mode) {
+    case 0:
+        io_conf.mode = GPIO_MODE_INPUT ;
+        break;
+    case 1:
+        io_conf.mode = GPIO_MODE_OUTPUT;
+        break;
+    case 2:
+        io_conf.mode = GPIO_MODE_INPUT_OUTPUT;
+        break;
+    case 3:
+        io_conf.mode = GPIO_MODE_DISABLE;
+        break;
+    default:
+        return ESP_AT_RESULT_CODE_ERROR;
+    }
+
+    if (esp_at_get_para_as_digit(num_index++, &para_pullup) == ESP_AT_PARA_PARSE_RESULT_OK) {
+        io_conf.pull_up_en = (( para_pullup == 0) ? GPIO_PULLUP_DISABLE : GPIO_PULLUP_ENABLE);
+    } else {
+        io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+    }
+    if (esp_at_get_para_as_digit(num_index++, &para_pulldown) == ESP_AT_PARA_PARSE_RESULT_OK) {
+        io_conf.pull_down_en = ((para_pulldown == 0) ? GPIO_PULLDOWN_DISABLE : GPIO_PULLDOWN_ENABLE);
+    } else {
+        io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    }
+    //configure GPIO with the given settings
+    esp_err_t err =  gpio_config(&io_conf);
+    if (err != ESP_OK) {
+        return ESP_AT_RESULT_CODE_ERROR;
+    }
+    return ESP_AT_RESULT_CODE_OK;
+}
+
+/// @brief +CGSETV
+/// @param para_num
+/// @return
+static uint8_t at_setup_cmd_set_gpio(uint8_t para_num)
+{
+    int32_t para_gpio = 0;
+    int32_t para_level = 0;
+    uint8_t num_index = 0;
+
+    if (esp_at_get_para_as_digit(num_index++, &para_gpio) != ESP_AT_PARA_PARSE_RESULT_OK) {
+        return ESP_AT_RESULT_CODE_ERROR;
+    }
+    if (esp_at_get_para_as_digit(num_index++, &para_level) != ESP_AT_PARA_PARSE_RESULT_OK) {
+        return ESP_AT_RESULT_CODE_ERROR;
+    }
+    // if (!check_gpio_valid(para_gpio)) {
+    //     return ESP_AT_RESULT_CODE_ERROR;
+    // }
+
+    int gpio_num = get_pico_physics_gpio_num(para_gpio);
+    if (gpio_num == -1) {
+        return ESP_AT_RESULT_CODE_ERROR;
+    }
+
+    if (gpio_set_level(gpio_num, para_level) != ESP_OK) {
+        return ESP_AT_RESULT_CODE_ERROR;
+    }
+    return ESP_AT_RESULT_CODE_OK;
+}
+
+/// @brief +CGGETV
+/// @param para_num
+/// @return
+static uint8_t at_setup_cmd_get_gpio(uint8_t para_num)
+{
+    int32_t para_gpio = 0;
+    uint8_t num_index = 0;
+    uint8_t buffer[64] = {0};
+
+    if (esp_at_get_para_as_digit(num_index++, &para_gpio) != ESP_AT_PARA_PARSE_RESULT_OK) {
+        return ESP_AT_RESULT_CODE_ERROR;
+    }
+    // if (!check_gpio_valid(para_gpio)) {
+    //     return ESP_AT_RESULT_CODE_ERROR;
+    // }
+    int gpio_num = get_pico_physics_gpio_num(para_gpio);
+    if (gpio_num == -1) {
+        return ESP_AT_RESULT_CODE_ERROR;
+    }
+
+    int level = gpio_get_level(gpio_num);
+    snprintf((char *)buffer, 64, "+CGGETV:%d\r\n", level);
+    esp_at_port_write_data(buffer, strlen((char *)buffer));
+
+    return ESP_AT_RESULT_CODE_OK;
+}
+
 static const esp_at_cmd_struct s_at_user_cmd[] = {
     {"+USERRAM", NULL, at_query_cmd_userram, at_setup_cmd_userram, NULL},
     {"+USEROTA", NULL, NULL, at_setup_cmd_userota, NULL},
@@ -674,6 +884,9 @@ static const esp_at_cmd_struct s_at_user_cmd[] = {
     {"+USERWKMCUCFG", NULL, NULL, at_setup_cmd_userwkmcucfg, NULL},
     {"+USERMCUSLEEP", NULL, NULL, at_setup_cmd_usermcusleep, NULL},
 #endif
+    {"+CGDRT", NULL, at_query_cmd_config_gpio, at_setup_cmd_config_gpio, NULL},
+    {"+CGSETV", NULL, at_query_cmd_set_gpio, at_setup_cmd_set_gpio, NULL},
+    {"+CGGETV", NULL, at_query_cmd_get_gpio, at_setup_cmd_get_gpio, NULL},
 };
 
 bool esp_at_user_cmd_regist(void)
